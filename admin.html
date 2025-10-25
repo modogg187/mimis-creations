@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mimi's Admin Panel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root { --primary: #d4a373; --accent: #8b5e3c; --light: #fdf6f0; --dark: #2c1810; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: 'Montserrat', sans-serif; background: var(--light); color: var(--dark); padding: 20px; }
+    .container { max-width: 1000px; margin: auto; }
+    h1, h2, h3 { color: var(--accent); }
+    .box { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,.1); margin-bottom: 30px; }
+    input, select, button, textarea { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; }
+    button { background: var(--primary); color: white; border: none; cursor: pointer; font-weight: 600; }
+    button:hover { background: var(--accent); }
+    .hidden { display: none; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: var(--light); }
+    .actions button { width: auto; padding: 6px 12px; margin-right: 5px; font-size: 0.9rem; }
+    .notification { position: fixed; top: 20px; right: 20px; background: #90c290; color: white; padding: 15px; border-radius: 6px; z-index: 1000; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Login -->
+  <div class="box" id="loginBox">
+    <h2>Admin Login</h2>
+    <input type="email" id="email" placeholder="Email" />
+    <input type="password" id="pass" placeholder="Password" />
+    <button id="loginBtn">Login</button>
+    <p style="margin-top:10px;">No account? <a href="#" id="showRegister">Register</a></p>
+  </div>
+
+  <!-- Register -->
+  <div class="box hidden" id="registerBox">
+    <h2>Register</h2>
+    <input type="text" id="regName" placeholder="Name" />
+    <input type="email" id="regEmail" placeholder="Email" />
+    <input type="password" id="regPass" placeholder="Password" />
+    <button id="regBtn">Create Account</button>
+    <p><a href="#" id="backLogin">Back to login</a></p>
+  </div>
+
+  <!-- Admin Panel -->
+  <div class="box hidden" id="adminPanel">
+    <h1>Mimi's Creations – Admin</h1>
+    <button id="logoutBtn" style="float:right;">Logout</button>
+
+    <h3>Add Product</h3>
+    <form id="addForm" enctype="multipart/form-data">
+      <input type="text" name="name" placeholder="Name" required />
+      <input type="number" step="0.01" name="price" placeholder="Price" required />
+      <select name="category_id" id="catSelect" required></select>
+      <input type="file" name="image" accept="image/*" required />
+      <button type="submit">Add Product</button>
+    </form>
+
+    <h3 style="margin-top:40px;">Manage Categories</h3>
+    <input type="text" id="newCat" placeholder="New category name" />
+    <button id="addCatBtn">Add Category</button>
+    <ul id="catList" style="margin-top:10px; list-style:none;"></ul>
+
+    <h3 style="margin-top:40px;">Products</h3>
+    <table id="productTable">
+      <thead><tr><th>Img</th><th>Name</th><th>Price</th><th>Category</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  const API = '/api';
+  let token = localStorage.getItem('mimi_token');
+
+  function $(s) { return document.querySelector(s); }
+  function $$(s) { return document.querySelectorAll(s); }
+  function show(id) { $(`#${id}`).classList.remove('hidden'); }
+  function hide(id) { $(`#${id}`).classList.add('hidden'); }
+  function notify(msg) {
+    const n = document.createElement('div'); n.className = 'notification'; n.textContent = msg;
+    document.body.appendChild(n);
+    setTimeout(() => n.remove(), 3000);
+  }
+
+  // Auth
+  $('#loginBtn').onclick = async () => {
+    const res = await fetch(`${API}/auth/login`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({email:$('#email').value, password:$('#pass').value}) });
+    const data = await res.json();
+    if (res.ok) { localStorage.setItem('mimi_token', data.token); location.reload(); } else notify(data.error);
+  };
+
+  $('#regBtn').onclick = async () => {
+    const res = await fetch(`${API}/auth/register`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name:$('#regName').value, email:$('#regEmail').value, password:$('#regPass').value}) });
+    const data = await res.json();
+    if (res.ok) { notify('Account created – login now'); hide('registerBox'); show('loginBox'); } else notify(data.error);
+  };
+
+  $('#showRegister').onclick = e => { e.preventDefault(); hide('loginBox'); show('registerBox'); };
+  $('#backLogin').onclick = e => { e.preventDefault(); hide('registerBox'); show('loginBox'); };
+  $('#logoutBtn').onclick = () => { localStorage.removeItem('mimi_token'); location.reload(); };
+
+  // Load Cats
+  async function loadCats() {
+    const res = await fetch(`${API}/categories`);
+    const cats = await res.json();
+    const select = $('#catSelect');
+    select.innerHTML = '<option value="">-- Select --</option>';
+    cats.forEach(c => select.add(new Option(c.name, c.id)));
+
+    const list = $('#catList');
+    list.innerHTML = '';
+    cats.forEach(c => {
+      const li = document.createElement('li');
+      li.innerHTML = `${c.name} <button data-id="${c.id}" class="del-cat" style="float:right;">Delete</button>`;
+      list.appendChild(li);
+    });
+    $$('.del-cat').forEach(b => b.onclick = async () => {
+      if (confirm('Delete category? All products will be removed.')) {
+        await fetch(`${API}/categories/${b.dataset.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        loadCats(); loadProducts();
+      }
+    });
+  }
+
+  $('#addCatBtn').onclick = async () => {
+    const name = $('#newCat').value.trim();
+    if (!name) return;
+    const res = await fetch(`${API}/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({name}) });
+    if (res.ok) { $('#newCat').value = ''; loadCats(); }
+  };
+
+  // Products
+  async function loadProducts() {
+    const res = await fetch(`${API}/products`);
+    const prods = await res.json();
+    const tbody = $('#productTable tbody');
+    tbody.innerHTML = '';
+    prods.forEach(p => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><img src="${p.image}" width="50" /></td>
+        <td>${p.name}</td>
+        <td>$${Number(p.price).toFixed(2)}</td>
+        <td>${p.category}</td>
+        <td class="actions">
+          <button class="edit" data-id="${p.id}">Edit</button>
+          <button class="delete" data-id="${p.id}">Delete</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+    $$('.edit').forEach(b => b.onclick = editProduct);
+    $$('.delete').forEach(b => b.onclick = async () => {
+      if (confirm('Delete product?')) {
+        await fetch(`${API}/products/${b.dataset.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        loadProducts();
+      }
+    });
+  }
+
+  async function editProduct(e) {
+    const id = e.target.dataset.id;
+    const res = await fetch(`${API}/products/${id}`);
+    const p = await res.json();
+
+    const name = prompt('Name', p.name) || p.name;
+    const price = prompt('Price', p.price) || p.price;
+    const catId = prompt('Category ID', p.category_id) || p.category_id;
+
+    const form = new FormData();
+    form.append('name', name);
+    form.append('price', price);
+    form.append('category_id', catId);
+
+    const putRes = await fetch(`${API}/products/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (putRes.ok) { loadProducts(); notify('Updated'); }
+  }
+
+  $('#addForm').onsubmit = async e => {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    const res = await fetch(`${API}/products`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (res.ok) { e.target.reset(); loadProducts(); loadCats(); notify('Added'); }
+  };
+
+  // Init
+  if (token) {
+    hide('loginBox'); hide('registerBox'); show('adminPanel');
+    loadCats(); loadProducts();
+  } else {
+    show('loginBox');
+  }
+</script>
+</body>
+</html>

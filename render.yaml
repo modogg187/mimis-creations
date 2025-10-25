@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: mimis-creations
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server/server.js
+    envVars:
+      JWT_SECRET: your-super-secret-jwt-key-123456789
+      PORT: 10000
+    autoDeploy: true
+    healthCheckPath: /api/products

@@ -1,0 +1,5 @@
+node_modules/
+mimi.db
+npm-debug.log
+.DS_Store
+.env
